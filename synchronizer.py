@@ -1,128 +1,109 @@
 import csv
+import logging
 from db import get_connection
 
-def read_portal_csv(csv_path: str):
-    """
-    Returns a dict {product_id: { title, price, store_id }}.
-    """
-    data = {}
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            pid = int(row["product_id"])
-            data[pid] = {
-                "title": row["title"],
-                "price": float(row["price"]),
-                "store_id": int(row["store_id"])
-            }
-    return data
+logger = logging.getLogger(__name__)
 
-def fetch_db_products(client_id: int):
+def synchronize_portal(portal_csv_path: str, client_id: int):
     """
-    Returns a dict {product_id: { title, price, store_id }} from the DB.
+    Synchronizes the database with the portal CSV.
+    - Deletions: Remove products from DB that are not in the portal CSV.
+    - Updates: Update products in DB if their data has changed.
+    - Insertions: Insert products from the portal CSV that are not in the DB.
     """
-    results = {}
+    logger.info("Starting portal synchronization for client %s using file: '%s'", client_id, portal_csv_path)
+    portal_records = {}
+
+    # Read and validate CSV rows.
+    try:
+        with open(portal_csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    product_id = int(row["product_id"])
+                    title = row["title"].strip()
+                    price = float(row["price"])
+                    store_id = int(row["store_id"])
+                    portal_records[product_id] = {
+                        "title": title,
+                        "price": price,
+                        "store_id": store_id
+                    }
+                except (ValueError, KeyError) as e:
+                    logger.error("Skipping portal row due to error: %s -- %s", row, e)
+    except Exception as e:
+        logger.exception("Error reading portal CSV file '%s': %s", portal_csv_path, e)
+        return
+
+    if not portal_records:
+        logger.info("No valid portal records found in CSV.")
+        return
+
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("""
-                SELECT product_id, title, price, store_id
-                FROM products
-                WHERE client_id = %s
-            """, (client_id,))
-            for row in cur.fetchall():
-                pid, title, price, store_id = row
-                results[pid] = {
-                    "title": title,
-                    "price": float(price),
-                    "store_id": store_id
-                }
+            # Retrieve current products from DB for the client.
+            logger.info("Retrieving current products from database for client %s", client_id)
+            cur.execute("SELECT product_id, title, price, store_id FROM products WHERE client_id = %s", (client_id,))
+            db_products = {row[0]: {"title": row[1], "price": float(row[2]), "store_id": row[3]} for row in cur.fetchall()}
+            logger.info("Retrieved %d product(s) from the database.", len(db_products))
+
+            # Determine deletions: products in DB but not in portal CSV.
+            db_product_ids = set(db_products.keys())
+            portal_product_ids = set(portal_records.keys())
+            to_delete = db_product_ids - portal_product_ids
+
+            # Determine insertions: products in portal CSV but not in DB.
+            to_insert = portal_product_ids - db_product_ids
+
+            # Determine potential updates: products in both.
+            potential_updates = db_product_ids & portal_product_ids
+
+            updated_count = 0
+            inserted_count = 0
+            deleted_count = 0
+
+            # Handle deletions.
+            for product_id in to_delete:
+                cur.execute("DELETE FROM products WHERE client_id = %s AND product_id = %s", (client_id, product_id))
+                deleted_count += 1
+                logger.info("Deleted product_id %s for client %s", product_id, client_id)
+
+            # Handle insertions.
+            for product_id in to_insert:
+                record = portal_records[product_id]
+                cur.execute(
+                    "INSERT INTO products (client_id, product_id, title, price, store_id) VALUES (%s, %s, %s, %s, %s)",
+                    (client_id, product_id, record["title"], record["price"], record["store_id"])
+                )
+                inserted_count += 1
+                logger.info("Inserted new product_id %s for client %s", product_id, client_id)
+
+            # Handle updates.
+            for product_id in potential_updates:
+                portal_record = portal_records[product_id]
+                db_record = db_products[product_id]
+                if (portal_record["title"] != db_record["title"] or 
+                    portal_record["price"] != db_record["price"] or 
+                    portal_record["store_id"] != db_record["store_id"]):
+                    cur.execute("""
+                        UPDATE products
+                        SET title = %s,
+                            price = %s,
+                            store_id = %s,
+                            updated_at = NOW()
+                        WHERE client_id = %s AND product_id = %s
+                    """, (portal_record["title"], portal_record["price"], portal_record["store_id"], client_id, product_id))
+                    updated_count += 1
+                    logger.info("Updated product_id %s for client %s", product_id, client_id)
+
+            conn.commit()
+            logger.info("Portal synchronization commit successful.")
+            logger.info("Synchronization summary for client %s: %d deleted, %d updated, %d inserted.", 
+                        client_id, deleted_count, updated_count, inserted_count)
+    except Exception as e:
+        logger.exception("Database error during portal synchronization: %s", e)
+        conn.rollback()
     finally:
         conn.close()
-    return results
-
-def synchronize_portal(csv_path: str, client_id: int):
-    """
-    Compare the DB data to the portal CSV and apply:
-    - Deletion (DB only, not in CSV)
-    - Update (DB & CSV differ)
-    - Insert (CSV but not DB)
-    """
-    portal_data = read_portal_csv(csv_path)
-    db_data = fetch_db_products(client_id)
-
-    # Determine what to delete/update/insert
-    to_delete = []
-    to_update = []
-    to_insert = []
-
-    # Check DB items
-    for pid, db_vals in db_data.items():
-        if pid not in portal_data:
-            to_delete.append(pid)
-        else:
-            # check differences
-            p_vals = portal_data[pid]
-            if (db_vals["title"] != p_vals["title"] or
-                db_vals["price"] != p_vals["price"] or
-                db_vals["store_id"] != p_vals["store_id"]):
-                to_update.append((pid, p_vals))
-
-    # Check for new items in portal CSV
-    for pid, p_vals in portal_data.items():
-        if pid not in db_data:
-            to_insert.append((pid, p_vals))
-
-    # Apply changes
-    apply_changes(client_id, to_delete, to_update, to_insert)
-
-def apply_changes(client_id, to_delete, to_update, to_insert):
-    conn = get_connection()
-    try:
-        with conn.cursor() as cur:
-            # Deletions
-            if to_delete:
-                cur.execute("""
-                    DELETE FROM products
-                    WHERE client_id = %s AND product_id = ANY(%s)
-                """, (client_id, to_delete))
-                print(f"Deleted {cur.rowcount} products for client {client_id}.")
-
-            # Updates
-            update_sql = """
-                UPDATE products
-                SET title = %s,
-                    price = %s,
-                    store_id = %s,
-                    updated_at = NOW()
-                WHERE client_id = %s AND product_id = %s
-            """
-            for (pid, p_vals) in to_update:
-                cur.execute(update_sql, (
-                    p_vals["title"],
-                    p_vals["price"],
-                    p_vals["store_id"],
-                    client_id,
-                    pid
-                ))
-                print(f"Updated product_id={pid} for client {client_id}.")
-
-            # Inserts
-            insert_sql = """
-                INSERT INTO products (client_id, product_id, title, price, store_id)
-                VALUES (%s, %s, %s, %s, %s)
-            """
-            for (pid, p_vals) in to_insert:
-                cur.execute(insert_sql, (
-                    client_id,
-                    pid,
-                    p_vals["title"],
-                    p_vals["price"],
-                    p_vals["store_id"]
-                ))
-            if to_insert:
-                print(f"Inserted {len(to_insert)} new products for client {client_id}.")
-
-        conn.commit()
-    finally:
-        conn.close()
+        logger.info("Database connection closed after portal synchronization.")
