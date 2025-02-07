@@ -8,9 +8,10 @@ logger = logging.getLogger(__name__)
 
 def import_feed_csv(csv_path: str, client_id: int):
     """
-    Reads feed_items.csv, validates the rows, and inserts only new records
-    into the products table. Existing records are left unchanged; the synchronizer
-    will later handle any updates or deletions.
+    Reads feed_items.csv, validates the rows, and updates existing records or inserts new ones
+    into the products table. If a product (identified by client_id and product_id) exists,
+    it is updated with the new title, price, and store_id (and updated_at is set to NOW()).
+    Otherwise, the product is inserted.
     """
     records = []
 
@@ -35,11 +36,11 @@ def import_feed_csv(csv_path: str, client_id: int):
         logger.info("No valid records found in feed CSV.")
         return
 
-    # Connect to the database and insert only new records.
+    # Connect to the database and update or insert records accordingly.
     conn = get_connection()
     try:
         with conn.cursor() as cur:
-            # Get the set of product_ids from the CSV.
+            # Get all product_ids from the CSV.
             product_ids = tuple(record[0] for record in records)
             if not product_ids:
                 logger.info("No product IDs found in CSV.")
@@ -54,20 +55,33 @@ def import_feed_csv(csv_path: str, client_id: int):
             cur.execute(query, (client_id, product_ids))
             existing_ids = {row[0] for row in cur.fetchall()}
 
-            # Filter records to insert only those not already in the database.
-            new_records = [record for record in records if record[0] not in existing_ids]
+            updated_count = 0
+            inserted_count = 0
 
-            if new_records:
-                insert_sql = """
-                    INSERT INTO products (client_id, product_id, title, price, store_id)
-                    VALUES (%s, %s, %s, %s, %s)
-                """
-                for product_id, title, price, store_id in new_records:
+            for product_id, title, price, store_id in records:
+                if product_id in existing_ids:
+                    # Update the existing record.
+                    update_sql = """
+                        UPDATE products
+                        SET title = %s,
+                            price = %s,
+                            store_id = %s,
+                            updated_at = NOW()
+                        WHERE client_id = %s AND product_id = %s
+                    """
+                    cur.execute(update_sql, (title, price, store_id, client_id, product_id))
+                    updated_count += 1
+                else:
+                    # Insert a new record.
+                    insert_sql = """
+                        INSERT INTO products (client_id, product_id, title, price, store_id)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """
                     cur.execute(insert_sql, (client_id, product_id, title, price, store_id))
-                conn.commit()
-                logger.info(f"Inserted {len(new_records)} new records for client {client_id}.")
-            else:
-                logger.info("No new records to insert.")
+                    inserted_count += 1
+
+            conn.commit()
+            logger.info(f"Updated {updated_count} records, Inserted {inserted_count} new records for client {client_id}.")
     except Exception as e:
         logger.exception("Database error during feed import: %s", e)
         conn.rollback()
