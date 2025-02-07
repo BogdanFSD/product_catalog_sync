@@ -1,9 +1,13 @@
+import logging
 from db import get_connection
+
+logger = logging.getLogger(__name__)
 
 def create_tables():
     """
     Creates the products table if it doesn't exist.
     """
+    logger.info("Creating tables if they do not exist...")
     create_table_sql = """
     CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
@@ -21,6 +25,12 @@ def create_tables():
     try:
         with conn.cursor() as cur:
             cur.execute(create_table_sql)
+            logger.info("Executed table creation SQL.")
         conn.commit()
+        logger.info("Tables created or already exist.")
+    except Exception as e:
+        logger.exception("Error creating tables: %s", e)
+        conn.rollback()
     finally:
         conn.close()
+        logger.info("Database connection closed after table creation.")

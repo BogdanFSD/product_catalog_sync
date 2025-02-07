@@ -2,7 +2,7 @@ import csv
 import logging
 from db import get_connection
 
-# Configure logging
+# Configure logging (if not already configured in main)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ def import_feed_csv(csv_path: str, client_id: int):
     it is updated with the new title, price, and store_id (and updated_at is set to NOW()).
     Otherwise, the product is inserted.
     """
+    logger.info("Starting import_feed_csv with file: '%s' for client: %s", csv_path, client_id)
     records = []
 
     # Read and validate CSV rows.
@@ -27,14 +28,16 @@ def import_feed_csv(csv_path: str, client_id: int):
                     store_id = int(row["store_id"])
                     records.append((product_id, title, price, store_id))
                 except (ValueError, KeyError) as e:
-                    logger.error(f"Skipping row due to error: {row} -- {e}")
+                    logger.error("Skipping row due to error: %s -- %s", row, e)
     except Exception as e:
-        logger.exception(f"Error reading CSV file {csv_path}: {e}")
+        logger.exception("Error reading CSV file '%s': %s", csv_path, e)
         return
 
     if not records:
         logger.info("No valid records found in feed CSV.")
         return
+
+    logger.info("Parsed %d valid record(s) from CSV.", len(records))
 
     # Connect to the database and update or insert records accordingly.
     conn = get_connection()
@@ -46,7 +49,7 @@ def import_feed_csv(csv_path: str, client_id: int):
                 logger.info("No product IDs found in CSV.")
                 return
 
-            # Retrieve existing product_ids for this client.
+            logger.info("Retrieving existing product IDs for client %s", client_id)
             query = """
                 SELECT product_id
                 FROM products
@@ -54,6 +57,7 @@ def import_feed_csv(csv_path: str, client_id: int):
             """
             cur.execute(query, (client_id, product_ids))
             existing_ids = {row[0] for row in cur.fetchall()}
+            logger.info("Found %d existing product(s) for client %s", len(existing_ids), client_id)
 
             updated_count = 0
             inserted_count = 0
@@ -71,6 +75,7 @@ def import_feed_csv(csv_path: str, client_id: int):
                     """
                     cur.execute(update_sql, (title, price, store_id, client_id, product_id))
                     updated_count += 1
+                    logger.info("Updated product_id %s for client %s", product_id, client_id)
                 else:
                     # Insert a new record.
                     insert_sql = """
@@ -79,11 +84,15 @@ def import_feed_csv(csv_path: str, client_id: int):
                     """
                     cur.execute(insert_sql, (client_id, product_id, title, price, store_id))
                     inserted_count += 1
+                    logger.info("Inserted product_id %s for client %s", product_id, client_id)
 
             conn.commit()
-            logger.info(f"Updated {updated_count} records, Inserted {inserted_count} new records for client {client_id}.")
+            logger.info("Database commit successful.")
+            logger.info("Synchronization summary for client %s: Updated %d record(s), Inserted %d new record(s).", 
+                        client_id, updated_count, inserted_count)
     except Exception as e:
         logger.exception("Database error during feed import: %s", e)
         conn.rollback()
     finally:
         conn.close()
+        logger.info("Database connection closed after feed import.")
