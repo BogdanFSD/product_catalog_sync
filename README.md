@@ -1,13 +1,13 @@
 # product_catalog_sync
 
-# Product Catalog Sync (Version 1)
+# Product Catalog Sync (Version 2)
 
-This is a minimal version that only imports a CSV feed into a PostgreSQL database.
+A tool to import product data from CSV files into a PostgreSQL database and synchronize the database with portal data.
+
 
 ## Requirements
 - Python 3.9+
 - PostgreSQL server running locally (or accessible via network)
-- `psycopg2` library
 
 ## Installation
 
@@ -57,16 +57,6 @@ DB_HOST=localhost
 DB_PORT=5432
 ```
 
-## Usage
-
-Run the importer with the following command:
-```
-python main.py --feed path/to/feed_items.csv --client 1
-```
-
-- --feed (required): Path to the CSV file (e.g., feed_items.csv)
-
-- --client (optional): Client ID (defaults to 1 if not provided)
 
 ## Database Setup
 
@@ -82,4 +72,37 @@ psql -U postgres -d your_db_name -h localhost -W
 # Inside psql:
 \dt                 # List tables
 SELECT * FROM products LIMIT 10;  # View data
+```
+
+## Usage
+
+1. Run the importer with the following command:
+```
+python main.py --feed path/to/feed_items.csv --client 1
+```
+
+- --feed (required): Path to the CSV file (e.g., feed_items.csv)
+
+- --client (optional): Client ID (defaults to 1 if not provided)
+
+2. Import + Synchronize with Portal CSV
+```
+python main.py --feed feed_items.csv --portal portal_items.csv --client 1
+```
+
+- --portal (optional): Path to the portal CSV file for synchronization.
+
+The process:
+- Import products from feed_items.csv.
+- Compare the database with portal_items.csv:
+- Insert new products from the portal.
+- Update products with changed details.
+- Delete products missing from the portal.
+
+## Check Data in PostgreSQL
+```
+psql -U postgres -d your_db_name -h localhost -W
+# Inside psql:
+\dt                 # List tables
+SELECT * FROM products LIMIT 10;  # View products
 ```
