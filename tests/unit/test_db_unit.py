@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import psycopg2
-from db import get_connection
+from db.connection import get_connection
 
 class TestDBUnit(unittest.TestCase):
     """
