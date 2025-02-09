@@ -4,14 +4,14 @@ import runpy
 from unittest.mock import patch, mock_open
 
 from tests.helpers import fake_connection_factory
-from main import main
+from cli import main
 
 class TestMainUnit(unittest.TestCase):
     def test_main_feed_only(self):
         """
         If user passes only --feed, we create tables + import feed, but do NOT do portal sync.
         """
-        test_args = ["main.py", "--feed", "feed.csv", "--client", "1"]
+        test_args = ["cli.py", "--feed", "feed.csv", "--client", "1"]
         feed_csv_data = "product_id,title,price,store_id\n1,Test Product,9.99,100\n"
 
         with patch.object(sys, 'argv', test_args), \
@@ -23,11 +23,6 @@ class TestMainUnit(unittest.TestCase):
         # No portal => no PortalSynchronizer usage
         mock_sync_class.assert_not_called()
 
-        # Typically:
-        # 1) TableCreator -> get_connection
-        # 2) FeedImporter -> get_connection
-        # 3) ProductRepository (inside FeedImporter) -> get_connection
-        # => total = 3
         self.assertEqual(
             mock_connect.call_count, 3,
             f"Expected 3 calls to psycopg2.connect, got {mock_connect.call_count}"
@@ -38,7 +33,7 @@ class TestMainUnit(unittest.TestCase):
         If user passes --feed AND --portal, we do both feed import and portal sync.
         We'll patch builtins.open with 2 side_effect data strings: feed + portal.
         """
-        test_args = ["main.py", "--feed", "feed.csv", "--portal", "portal.csv", "--client", "1"]
+        test_args = ["cli.py", "--feed", "feed.csv", "--portal", "portal.csv", "--client", "1"]
         feed_data = "product_id,title,price,store_id\n1,FeedProduct,12.34,101\n"
         portal_data = "product_id,title,price,store_id\n2,PortalProd,55.55,202\n"
 
@@ -53,12 +48,6 @@ class TestMainUnit(unittest.TestCase):
              patch("psycopg2.connect", return_value=fake_connection_factory()) as mock_connect:
             main()
 
-        # According to your logs, actual calls = 5:
-        # 1) table_creator.create_tables
-        # 2) feed_importer
-        # 3) product_repository (inside feed_importer)
-        # 4) portal_synchronizer
-        # 5) product_repository again for the portal sync (or additional calls)
         self.assertEqual(
             mock_connect.call_count, 5,
             f"Expected 5 calls to psycopg2.connect, got {mock_connect.call_count}"
@@ -69,15 +58,14 @@ class TestMainUnit(unittest.TestCase):
         Test running the main module with minimal arguments. 
         We'll patch psycopg2.connect so there's no real DB call, but let the code run.
         """
-        test_args = ["main.py", "--feed", "feed.csv", "--client", "1"]
+        test_args = ["cli.py", "--feed", "feed.csv", "--client", "1"]
         feed_csv_data = "product_id,title,price,store_id\n1,Dummy,0.0,0\n"
 
         with patch("builtins.open", mock_open(read_data=feed_csv_data)), \
              patch("psycopg2.connect", return_value=fake_connection_factory()) as mock_connect, \
              patch.object(sys, 'argv', test_args):
-            runpy.run_module("main", run_name="__main__")
+            runpy.run_module("cli", run_name="__main__")
 
-        # feed-only => 3 calls
         self.assertEqual(
             mock_connect.call_count, 3,
             f"Expected 3 calls to psycopg2.connect, got {mock_connect.call_count}"
@@ -92,8 +80,8 @@ class TestMainUnit(unittest.TestCase):
 
         with patch("psycopg2.connect", return_value=fake_conn), \
              patch("builtins.open", mock_open(read_data=feed_csv_data)), \
-             patch.object(sys, 'argv', ["main.py", "--feed", "dummy_feed.csv", "--client", "1"]):
-            runpy.run_module("main", run_name="__main__")
+             patch.object(sys, 'argv', ["cli.py", "--feed", "dummy_feed.csv", "--client", "1"]):
+            runpy.run_module("cli", run_name="__main__")
 
         self.assertTrue(
             fake_conn.commit.called,

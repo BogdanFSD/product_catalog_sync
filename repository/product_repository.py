@@ -3,7 +3,6 @@ from db.connection import DatabaseConnection
 
 logger = logging.getLogger(__name__)
 
-# Create a single instance to reuse, or each method can create its own.
 db_connection = DatabaseConnection()
 
 class ProductRepository:

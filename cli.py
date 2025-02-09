@@ -27,15 +27,12 @@ class Application:
     def run(self, feed_file, portal_file, client_id):
         logger.info("Application started.")
 
-        # 1) Create tables
         self.table_creator.create_tables()
 
-        # 2) Import feed
         feed_importer = self.feed_importer_factory()
         feed_importer.import_feed(feed_file, client_id)
         logger.info("Feed CSV import completed for client %s.", client_id)
 
-        # 3) If a portal file is provided, do synchronization
         if portal_file:
             logger.info("Starting portal synchronization for client %s.", client_id)
             synchronizer = self.portal_synchronizer_factory()

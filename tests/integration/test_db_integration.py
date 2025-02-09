@@ -1,16 +1,17 @@
 import unittest
-from db import get_connection
+from db.connection import DatabaseConnection
+from tests.integration.base_integration import BaseIntegrationTest
 
-class TestDBIntegration(unittest.TestCase):
-    """
-    Integration test that uses a real database connection.
-    Make sure you have a test DB accessible via environment variables.
-    """
+class TestDBIntegration(BaseIntegrationTest):
     def test_real_connection(self):
-        conn = get_connection()
+        db_conn = DatabaseConnection()
+        conn = db_conn.get_connection()
         self.assertIsNotNone(conn)
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
             result = cur.fetchone()
             self.assertEqual(result[0], 1)
-        conn.close()
+
+
+if __name__ == '__main__':
+    unittest.main()

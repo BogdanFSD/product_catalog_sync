@@ -12,8 +12,8 @@ class Product:
         self.store_id = store_id
 
     def __repr__(self):
-        return f"<Product(client_id={self.client_id},
-        product_id={self.product_id},
-        title='{self.title}',
-        price={self.price},
-        store_id={self.store_id})>"
+        return (f"<Product(client_id={self.client_id},"
+                f"product_id={self.product_id},"
+                f"title='{self.title}',"
+                f"price={self.price},"
+                f"store_id={self.store_id})>")
