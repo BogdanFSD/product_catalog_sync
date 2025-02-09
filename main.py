@@ -2,8 +2,8 @@ import argparse
 import logging
 
 from services.table_creator import TableCreator
-from repository.product_repository import ProductRepository
 from services.csv_reader import FeedCsvReader
+from repository.product_repository import ProductRepository
 from services.feed_importer import FeedImporter
 from services.portal_synchronizer import PortalSynchronizer
 
@@ -27,16 +27,18 @@ class Application:
     def run(self, feed_file, portal_file, client_id):
         logger.info("Application started.")
 
+        # 1) Create tables
         self.table_creator.create_tables()
 
+        # 2) Import feed
         feed_importer = self.feed_importer_factory()
         feed_importer.import_feed(feed_file, client_id)
         logger.info("Feed CSV import completed for client %s.", client_id)
 
+        # 3) If a portal file is provided, do synchronization
         if portal_file:
             logger.info("Starting portal synchronization for client %s.", client_id)
             synchronizer = self.portal_synchronizer_factory()
-
             portal_records = synchronizer.read_portal_csv(portal_file)
             if not portal_records:
                 logger.info("No valid portal records found in CSV.")
@@ -55,9 +57,7 @@ def main():
     table_creator = TableCreator()
 
     def feed_importer_factory():
-        repository = ProductRepository()
-        csv_reader = FeedCsvReader()
-        return FeedImporter(repository, csv_reader)
+        return FeedImporter(ProductRepository(), FeedCsvReader())
 
     def portal_synchronizer_factory():
         return PortalSynchronizer()
