@@ -1,6 +1,6 @@
 # product_catalog_sync
 
-# Product Catalog Sync (Version 2)
+# Product Catalog Sync (Version 3)
 
 A tool to import product data from CSV files into a PostgreSQL database and synchronize the database with portal data.
 
@@ -98,6 +98,38 @@ The process:
 - Insert new products from the portal.
 - Update products with changed details.
 - Delete products missing from the portal.
+
+3. Using the FastAPI Server
+
+Start the FastAPI application:
+
+```
+uvicorn app.main:app --reload
+```
+
+Access the API documentation at:
+
+- http://localhost:8000/docs
+
+- http://localhost:8000/redoc
+
+## API Endpoints
+
+- List Products: GET /products?client_id=1
+
+- Import Feed: POST /products/feed
+
+- Sync with Portal: POST /products/portal-sync
+
+- Feed & Sync Combined: POST /products/feed-and-sync
+
+## Example API Request (Using curl)
+
+```
+curl -X POST "http://localhost:8000/products/feed" \
+  -F "file=@feed_items.csv" \
+  -F "client_id=1"
+```
 
 ## Check Data in PostgreSQL
 ```

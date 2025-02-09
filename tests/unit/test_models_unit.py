@@ -20,3 +20,7 @@ class TestModelsUnit(BaseMockDBTest):
 
         self.fake_conn.rollback.assert_called_once()
         self.fake_conn.close.assert_called_once()
+
+
+if __name__ == '__main__':
+    unittest.main()

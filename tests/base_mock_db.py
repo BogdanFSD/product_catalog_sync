@@ -7,7 +7,6 @@ class BaseMockDBTest(unittest.TestCase):
     Base class for unit tests that need to mock out the DB connection.
     """
     def setUp(self):
-        # Create a fake connection/cursor
         self.fake_conn = fake_connection_factory()
         self.fake_cursor = self.fake_conn.cursor.return_value.__enter__.return_value
 
@@ -25,16 +24,13 @@ class BaseMockDBTest(unittest.TestCase):
             return_value=self.fake_conn
         )
 
-        # Start them
         self.mock_importer_conn = patcher_importer.start()
         self.mock_sync_conn = patcher_sync.start()
         self.mock_table_creator_conn = patcher_table_creator.start()
 
-        # Ensure they get stopped after each test
         self.addCleanup(patcher_importer.stop)
         self.addCleanup(patcher_sync.stop)
         self.addCleanup(patcher_table_creator.stop)
 
-        # Reset commit/rollback for each test
         self.fake_conn.commit.reset_mock()
         self.fake_conn.rollback.reset_mock()

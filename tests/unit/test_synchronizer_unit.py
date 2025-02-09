@@ -44,21 +44,15 @@ class TestSynchronizerUnit(BaseMockDBTest):
             db_products = {1: {'title': 'Old Product', 'price': 50.0, 'store_id': 101},
                            2: {'title': 'To Delete', 'price': 30.0, 'store_id': 102}}
 
-            # At this point, db_products should be:
-            # {1: {'title': 'Old Product', 'price': 50.0, 'store_id': 101},
-            # 2: {'title': 'To Delete', 'price': 30.0, 'store_id': 102}}
             to_delete, to_insert, to_update = sync.compute_sync_actions(db_products, portal_records)
 
 
-            # Assert computed sync actions are correct.
             self.assertEqual(to_delete, {2}, "Expected to delete product 2")
             self.assertEqual(set(to_insert.keys()), {3}, "Expected to insert product 3")
             self.assertEqual(set(to_update.keys()), {1}, "Expected to update product 1")
 
-            # Now call apply_sync_actions using the computed actions.
             sync.apply_sync_actions(1, to_delete, to_insert, to_update)
 
-        # Check that a DELETE was executed for product_id 2.
         delete_calls = [
             c for c in self.fake_cursor.execute.call_args_list
             if "DELETE FROM products" in c[0][0] and c[0][1] == (1, 2)
