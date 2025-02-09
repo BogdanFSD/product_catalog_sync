@@ -20,8 +20,11 @@ def create_app() -> FastAPI:
     """Factory to create and configure the FastAPI application."""
     app = FastAPI(title="Product Catalog Sync")
 
-    # Include the products router
     app.include_router(products_router, prefix="/products", tags=["Products"])
+
+    @app.get("/health")
+    def health_check():
+        return {"status": "ok"}
 
     @app.on_event("startup")
     async def startup_event():
